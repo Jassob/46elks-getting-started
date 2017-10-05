@@ -15,7 +15,8 @@ import Network.HTTP.Simple ( Request, parseRequest, httpJSON
 
 import ElkResponse
 
--- Information about how to porse the response code from 46elks API
+-- | SMS data type for 46elks API, the compiler will automatically
+-- derive instances for transforming an SMS to a JSON object.
 data SMS = SMS { to :: String
                , from :: String
                , message :: String
