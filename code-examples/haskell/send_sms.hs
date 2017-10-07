@@ -3,14 +3,11 @@
 -- Sending SMS using Haskell and the 46elks API
 --
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
 
-import Data.Aeson (FromJSON)
+import Data.Aeson (FromJSON, parseJSON, withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 (pack)
 import Data.Monoid ((<>))
-import GHC.Generics (Generic)
 import Network.HTTP.Simple ( Request, parseRequest, httpJSON
                            , setRequestBasicAuth, setRequestBodyURLEncoded
                            , setRequestMethod, getResponseBody)
@@ -22,21 +19,13 @@ data SMS = SMS { smsTo :: String
                , smsMessage :: String
                } deriving (Show)
 
--- | Response type on a successful POST of an SMS to 46elks.
-data ElkSMSResponse = Resp
-  { status :: String
-  , direction :: String
-  , from :: String
-  , created :: String
-  , parts :: Int
-  , to :: String
-  , cost :: Int
-  , message :: String
-  , id :: String
-  } deriving (Show, Generic, FromJSON)
-
 type Username = ByteString
 type Secret   = ByteString
+
+-- | How to parse the status of a sent SMS from a 46elks JSON response
+instance FromJSON SMS where
+  parseJSON = withObject "status" $ \o ->
+    SMS <$> o  .: "to" <*> o .: "from" <*> o .: "message"
 
 -- | Prepares a SMS for inclusion in a URLEncoded POST body.
 urlEncodeSMS :: SMS -> [(ByteString, ByteString)]
@@ -76,7 +65,7 @@ send_sms = do
     body <- getResponseBody <$> httpJSON request
 
     -- Print response message
-    putStrLn $ responseString (message body) (from body) (to body)
+    putStrLn $ responseString (smsMessage body) (smsFrom body) (smsTo body)
 
       where responseString :: String -> String -> String -> String
             responseString msg sender recipient =
