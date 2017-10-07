@@ -2,28 +2,47 @@
 -- 46elks API Sample
 -- Sending SMS using Haskell and the 46elks API
 --
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE OverloadedStrings #-}
-import Data.Aeson (FromJSON(..), ToJSON(..))
-import Data.ByteString (ByteString)
-import Data.Monoid ((<>))
-import GHC.Generics
-import Network.HTTP.Simple ( Request, parseRequest, httpJSON
-                           , setRequestBasicAuth, setRequestBodyJSON
-                           , setRequestMethod, getResponseBody)
 
-import ElkResponse
+import Data.Aeson (FromJSON)
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (pack)
+import Data.Monoid ((<>))
+import GHC.Generics (Generic)
+import Network.HTTP.Simple ( Request, parseRequest, httpJSON
+                           , setRequestBasicAuth, setRequestBodyURLEncoded
+                           , setRequestMethod, getResponseBody)
 
 -- | SMS data type for 46elks API, the compiler will automatically
 -- derive instances for transforming an SMS to a JSON object.
-data SMS = SMS { to :: String
-               , from :: String
-               , message :: String
-               } deriving (Show, Generic, FromJSON, ToJSON)
+data SMS = SMS { smsTo :: String
+               , smsFrom :: String
+               , smsMessage :: String
+               } deriving (Show)
+
+-- | Response type on a successful POST of an SMS to 46elks.
+data ElkSMSResponse = Resp
+  { status :: String
+  , direction :: String
+  , from :: String
+  , created :: String
+  , parts :: Int
+  , to :: String
+  , cost :: Int
+  , message :: String
+  , id :: String
+  } deriving (Show, Generic, FromJSON)
 
 type Username = ByteString
 type Secret   = ByteString
+
+-- | Prepares a SMS for inclusion in a URLEncoded POST body.
+urlEncodeSMS :: SMS -> [(ByteString, ByteString)]
+urlEncodeSMS (SMS to from message) = [ ("to", pack to)
+                                     , ("from", pack from)
+                                     , ("message", pack message) ]
 
 -- Your 46elks API key
 username :: Username
@@ -41,7 +60,7 @@ apiUrl = "https://api.46elks.com/a1/SMS"
 -- encoding and Basic authentication.
 prepareRequest :: SMS -> Request -> Request
 prepareRequest sms req =
-  setRequestBodyJSON sms
+  setRequestBodyURLEncoded (urlEncodeSMS sms)
   . setRequestMethod "POST"
   . setRequestBasicAuth username secret
   $ req
@@ -54,13 +73,14 @@ send_sms = do
     request <- prepareRequest sms <$> parseRequest apiUrl
 
     -- Parse the result for pretty printing
-    (msg, from, to) <- smsInfo . getResponseBody <$> httpJSON request
-    putStrLn $ "Sent \"" <> msg <> "\" from " <> from <> " to " <> to
-      where smsInfo :: ElkSMSResponse -> (String, String, String)
-            smsInfo resp = ( ElkResponse.message resp
-                           , ElkResponse.from resp
-                           , ElkResponse.to resp
-                           )
+    body <- getResponseBody <$> httpJSON request
+
+    -- Print response message
+    putStrLn $ responseString (message body) (from body) (to body)
+
+      where responseString :: String -> String -> String -> String
+            responseString msg sender recipient =
+              "Sent \"" <> msg <> "\" from " <> sender <> " to " <> recipient
 
 main :: IO ()
 main = send_sms
